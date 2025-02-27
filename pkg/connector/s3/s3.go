@@ -25,13 +25,13 @@ type Options struct {
 	Region  string   `json:"region"`
 }
 
-func (s *S3Connector) Sync(options string, cb connector.CallbackHandler) error {
+func (s *S3Connector) Sync(options string, cb connector.CallbackInterface) (string, error) {
 
 	var opts Options
 
 	err := json.Unmarshal([]byte(options), &opts)
 	if err != nil {
-		s.logger.Error("Failed to unmarshal options", "error", err)
+		s.logger.Info("Failed to unmarshal options", "error", err)
 	}
 
 	cfg, err := config.LoadDefaultConfig(context.TODO(),
@@ -50,14 +50,14 @@ func (s *S3Connector) Sync(options string, cb connector.CallbackHandler) error {
 		buckets, err = s.listBuckets()
 		if err != nil {
 			s.logger.Warn("Failed to list buckets", err)
-			return err
+			return fmt.Sprintf("{\"message\":\"%v\"}", err), err
 		}
 	}
 
 	for _, bucket := range buckets {
 		s.listObjects(bucket, opts, cb)
 	}
-	return nil
+	return `{"message":"success"}`, nil
 }
 
 func (s *S3Connector) listBuckets() ([]string, error) {
@@ -76,7 +76,7 @@ func (s *S3Connector) listBuckets() ([]string, error) {
 	return res, nil
 }
 
-func (s *S3Connector) listObjects(bucket string, opts Options, cb connector.CallbackHandler) {
+func (s *S3Connector) listObjects(bucket string, opts Options, cb connector.CallbackInterface) {
 	params := &s3.ListObjectsV2Input{
 		Bucket: &bucket,
 	}
@@ -103,8 +103,7 @@ func (s *S3Connector) listObjects(bucket string, opts Options, cb connector.Call
 				Uri:          arn,
 				Metadata:     fmt.Sprintf(`{"last_modified": "%s"}`, lastModified)})
 		}
-		// Ignore proto.Empty, error response
-		_, _ = cb.Callback(&proto.SyncResponse{Response: res})
+		_ = cb.Callback(&proto.SyncResponse{Response: res})
 	}
 }
 

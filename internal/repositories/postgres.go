@@ -17,7 +17,7 @@ func NewPostgresRepository(DB *sqlx.DB) *PostgresRepository {
 	return &PostgresRepository{DB: DB}
 }
 
-func (p *PostgresRepository) ListConnectors() ([]connector.Connector, int, error) {
+func (p *PostgresRepository) ListActiveConnectors() ([]connector.Connector, int, error) {
 	var connectors []connector.Connector
 	var count = 0
 	query := `SELECT * FROM connectors`
@@ -31,6 +31,16 @@ func (p *PostgresRepository) ListConnectors() ([]connector.Connector, int, error
 		return nil, count, err
 	}
 	return connectors, count, nil
+}
+
+func (p *PostgresRepository) ListAllConnectors() ([]string, error) {
+	var connectors []string
+	query := `SELECT distinct(connector) FROM data`
+	err := p.DB.Select(&connectors, query)
+	if err != nil {
+		return nil, err
+	}
+	return connectors, nil
 }
 
 func (p *PostgresRepository) GetConnector(name string) (*connector.Connector, error) {
@@ -137,12 +147,12 @@ func (p *PostgresRepository) AddData(data []connector.Data) error {
 	return nil
 }
 
-func (p *PostgresRepository) ListData(filters *types.Filter) ([]connector.Data, int, error) {
+func (p *PostgresRepository) ListData(filters *types.DataFilter) ([]connector.Data, int, error) {
 	var data []connector.Data
 	var count = 0
 	query := `SELECT * FROM data WHERE 1=1`
 	countQuery := `SELECT count(*) FROM data WHERE 1=1`
-	query, countQuery, args, err := p.buildQuery(query, countQuery, filters)
+	query, countQuery, args, err := p.buildDataQuery(query, countQuery, filters)
 	if err != nil {
 		return nil, count, err
 	}
@@ -176,7 +186,7 @@ func (p *PostgresRepository) EditData(data *connector.Data) (*connector.Data, er
 	return p.GetData(data.ID)
 }
 
-func (p *PostgresRepository) buildQuery(baseQuery string, countQuery string, filters *types.Filter) (string, string, []interface{}, error) {
+func (p *PostgresRepository) buildDataQuery(baseQuery string, countQuery string, filters *types.DataFilter) (string, string, []interface{}, error) {
 	var args []interface{}
 	if filters == nil {
 		baseQuery += fmt.Sprintf(" ORDER BY account_id ASC, resource_name ASC LIMIT %v", constants.PageSize)
@@ -185,7 +195,7 @@ func (p *PostgresRepository) buildQuery(baseQuery string, countQuery string, fil
 	if filters.Search != "" {
 		baseQuery += fmt.Sprint(" AND (resource_name ILIKE ? OR metadata ILIKE ? OR notes ILIKE ?)")
 		countQuery += fmt.Sprint(" AND (resource_name ILIKE ? OR metadata ILIKE ? OR notes ILIKE ?)")
-		args = append(args, "%"+filters.Search+"%", "%"+filters.Search+"%", "%"+filters.Search+"%", "%")
+		args = append(args, "%"+filters.Search+"%", "%"+filters.Search+"%", "%"+filters.Search+"%")
 	}
 	if filters.Accounts != nil {
 		queryPart, argsPart, _ := sqlx.In(" AND account_id in (?)", filters.Accounts)
@@ -216,10 +226,58 @@ func (p *PostgresRepository) buildQuery(baseQuery string, countQuery string, fil
 	return baseQuery, countQuery, args, nil
 }
 
-func isValidOrderBy(orderBy string) bool {
-	allowedColumns := map[string]bool{
-		"account_id":    true,
-		"resource_name": true,
+func (p *PostgresRepository) AddSyncInfo(syncInfo *connector.SyncInfo) error {
+	query := `INSERT INTO sync_info (connector, metadata, success) VALUES (:connector, :metadata, :success)`
+	_, err := p.DB.NamedExec(query, syncInfo)
+	if err != nil {
+		return err
 	}
-	return allowedColumns[orderBy]
+	return nil
+}
+
+func (p *PostgresRepository) ListSyncInfo(filters types.SyncInfoFilter) ([]connector.SyncInfo, error) {
+	syncInfo := []connector.SyncInfo{}
+	baseQuery := `SELECT * FROM sync_info WHERE 1=1`
+	countQuery := `SELECT COUNT(*) FROM sync_info WHERE 1=1`
+	var args []interface{}
+	if filters.Connectors != nil {
+		queryPart, argsPart, _ := sqlx.In(" AND connector in (?)", filters.Connectors)
+		baseQuery += queryPart
+		countQuery += queryPart
+		args = append(args, argsPart...)
+	}
+	if filters.Accounts != nil {
+		queryPart, argsPart, _ := sqlx.In(" AND account_id in (?)", filters.Accounts)
+		baseQuery += queryPart
+		countQuery += queryPart
+		args = append(args, argsPart...)
+	}
+	if filters.Success != nil {
+		baseQuery += " AND success = ?"
+		countQuery += " AND success = ?"
+		args = append(args, filters.Success)
+	}
+	if filters.OrderBy != "" && isValidOrderBy(filters.OrderBy) {
+		baseQuery += fmt.Sprintf("%v ORDER BY %s", baseQuery, filters.OrderBy)
+	} else {
+		baseQuery += " ORDER BY account_id ASC, resource_name ASC"
+	}
+	if filters.Sort != "" && (filters.Sort == "ASC" || filters.Sort == "DESC") {
+		baseQuery += fmt.Sprint(" %v", filters.Sort)
+	}
+	if filters.Limit != 0 {
+		baseQuery += fmt.Sprint(" LIMIT %v", filters.Limit)
+	} else {
+		baseQuery += " LIMIT 50"
+	}
+	if filters.Page != 0 {
+		baseQuery += fmt.Sprintf(" Offset %v", (filters.Page-1)*constants.PageSize)
+	}
+	baseQuery = p.DB.Rebind(baseQuery)
+	countQuery = p.DB.Rebind(countQuery)
+	err := p.DB.Select(syncInfo, baseQuery, args...)
+	if err != nil {
+		return nil, err
+	}
+	return syncInfo, nil
 }

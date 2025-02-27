@@ -16,13 +16,16 @@ message SyncRequest {
     uint32 callback_handler_server = 2;
 }
 
-// TODO: Add flag to know if full or differential sync
 message SyncResponse {
     repeated DataObject response = 1;
 }
 
+message EndSync {
+    string metadata = 1;
+  }
+
 service Connector {
-    rpc Sync(SyncRequest) returns (Empty);
+    rpc Sync(SyncRequest) returns (EndSync);
 }
 
 service CallbackHandler {
