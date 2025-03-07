@@ -23,6 +23,7 @@ CREATE TABLE data (
   uri TEXT NOT NULL DEFAULT '',
   metadata TEXT NOT NULL DEFAULT '',
   notes TEXT NOT NULL DEFAULT '',
+  last_synced_at TEXT NOT NULL DEFAULT now(),
   UNIQUE (account_id, remote_id)
 );
 

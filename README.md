@@ -22,7 +22,7 @@ c1 is a free, extensible, open-source data aggregator designed to list all files
 
 - CLI version
 - CRON jobs
-- Metadata of connector syncs to allow differential sync
+- Differential sync : store sync metadata and find a way to do delete deleted data
 - Connector cleanup/reinstall
 - Find a system to allow deletion of deleted items
 

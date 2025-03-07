@@ -2,6 +2,7 @@ package repositories
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/pidanou/c1-core/internal/constants"
@@ -134,8 +135,27 @@ func (p *SQLiteRepository) DeleteAccount(id int32) error {
 }
 
 func (p *SQLiteRepository) AddData(data []connector.Data) error {
-	query := `INSERT INTO data (account_id, remote_id, resource_name, connector, uri, metadata) VALUES (:account_id, :remote_id, :resource_name, :connector, :uri, :metadata)`
+	last_synced_at_time := time.Now()
+	last_synced_at := last_synced_at_time.Format("2006-01-02T15:04:05.000Z")
+	query := fmt.Sprintf(`INSERT INTO data (account_id, remote_id, resource_name, connector, uri, metadata) VALUES (:account_id, :remote_id, :resource_name, :connector, :uri, :metadata) ON CONFLICT (remote_id, account_id)
+	DO UPDATE SET 
+		resource_name = excluded.resource_name,
+		connector = excluded.connector,
+		uri = excluded.uri,
+		metadata = excluded.metadata
+    last_synced_at = %s
+  `, last_synced_at)
 	_, err := p.DB.NamedExec(query, data)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (p *SQLiteRepository) DeleteData(ids []int32) error {
+	query, args, _ := sqlx.In("DELETE FROM data WHERE id in (?)", ids)
+	query = p.DB.Rebind(query)
+	_, err := p.DB.Exec(query, args...)
 	if err != nil {
 		return err
 	}
@@ -144,12 +164,18 @@ func (p *SQLiteRepository) AddData(data []connector.Data) error {
 
 func (p *SQLiteRepository) ListData(filters *types.DataFilter) ([]connector.Data, int, error) {
 	var data []connector.Data
+	var args []interface{}
 	var count = 0
+	var err error
 	query := `SELECT * FROM data WHERE 1=1`
 	countQuery := `SELECT count(*) FROM data WHERE 1=1`
-	query, countQuery, args, err := p.buildDataQuery(query, countQuery, filters)
-	if err != nil {
-		return nil, count, err
+	if filters == nil {
+		query += fmt.Sprintf(" ORDER BY account_id ASC, resource_name ASC LIMIT %v", constants.PageSize)
+	} else {
+		query, countQuery, args, err = filters.ToSQL(p.DB, query, countQuery)
+		if err != nil {
+			return nil, count, err
+		}
 	}
 	err = p.DB.Select(&data, query, args...)
 	if err != nil {
@@ -160,46 +186,6 @@ func (p *SQLiteRepository) ListData(filters *types.DataFilter) ([]connector.Data
 		return nil, count, err
 	}
 	return data, count, nil
-}
-
-func (p *SQLiteRepository) buildDataQuery(baseQuery string, countQuery string, filters *types.DataFilter) (string, string, []interface{}, error) {
-	var args []interface{}
-	if filters == nil {
-		baseQuery += fmt.Sprintf(" ORDER BY account_id ASC, resource_name ASC LIMIT %v", constants.PageSize)
-		return baseQuery, countQuery, []interface{}{}, nil
-	}
-	if filters.Search != "" {
-		baseQuery += fmt.Sprint(" AND (resource_name LIKE ? OR metadata LIKE ? OR notes LIKE ?)")
-		countQuery += fmt.Sprint(" AND (resource_name LIKE ? OR metadata LIKE ? OR notes LIKE ?)")
-		args = append(args, "%"+filters.Search+"%", "%"+filters.Search+"%", "%"+filters.Search+"%")
-	}
-	if filters.Accounts != nil {
-		queryPart, argsPart, _ := sqlx.In(" AND account_id in (?)", filters.Accounts)
-		baseQuery += queryPart
-		countQuery += queryPart
-		args = append(args, argsPart...)
-	}
-	if filters.Connectors != nil {
-		queryPart, argsPart, _ := sqlx.In(" AND connector in (?)", filters.Connectors)
-		baseQuery += queryPart
-		countQuery += queryPart
-		args = append(args, argsPart...)
-	}
-	if filters.OrderBy != "" && isValidOrderBy(filters.OrderBy) {
-		baseQuery += fmt.Sprintf("%v ORDER BY %s", baseQuery, filters.OrderBy)
-	} else {
-		baseQuery += " ORDER BY account_id ASC, resource_name ASC"
-	}
-	if filters.Sort != "" && (filters.Sort == "ASC" || filters.Sort == "DESC") {
-		baseQuery += fmt.Sprint(" %v", filters.Sort)
-	}
-	baseQuery += " LIMIT 50"
-	if filters.Page != 0 {
-		baseQuery += fmt.Sprintf(" Offset %v", (filters.Page-1)*constants.PageSize)
-	}
-	baseQuery = p.DB.Rebind(baseQuery)
-	countQuery = p.DB.Rebind(countQuery)
-	return baseQuery, countQuery, args, nil
 }
 
 func (p *SQLiteRepository) GetData(id int32) (*connector.Data, error) {
@@ -213,7 +199,7 @@ func (p *SQLiteRepository) GetData(id int32) (*connector.Data, error) {
 }
 
 func (p *SQLiteRepository) EditData(data *connector.Data) (*connector.Data, error) {
-	query := `UPDATE data SET notes = :notes WHERE id = :id`
+	query := `UPDATE data SET notes = :notes, last_synced_at = :last_synced_at WHERE id = :id`
 	_, err := p.DB.NamedExec(query, data)
 	if err != nil {
 		return nil, err

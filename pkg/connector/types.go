@@ -38,6 +38,7 @@ type Data struct {
 	URI          string `db:"uri"`
 	Metadata     string `db:"metadata"`
 	Notes        string `db:"notes" form:"notes"`
+	LastSyncedAt string `db:"last_synced_at"`
 }
 
 type SyncInfo struct {

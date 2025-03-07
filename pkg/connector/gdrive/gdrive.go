@@ -71,7 +71,7 @@ func (s *GDriveConnector) Sync(options string, cb connector.CallbackInterface) (
 				Metadata:     fmt.Sprintf(`{"last_modified": "%s"}`, lastModified)})
 		}
 		// Ignore proto.Empty, error response
-		_ = cb.Callback(&proto.SyncResponse{Response: res})
+		_ = cb.Upsert(&proto.SyncResponse{Response: res})
 		pageToken = resp.NextPageToken
 		if resp.NextPageToken == "" {
 			break

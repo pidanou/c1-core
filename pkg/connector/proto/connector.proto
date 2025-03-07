@@ -29,5 +29,6 @@ service Connector {
 }
 
 service CallbackHandler {
-    rpc Callback(SyncResponse) returns (Empty);
+    rpc Upsert(SyncResponse) returns (Empty);
+    rpc Clean(Empty) returns (Empty);
 }

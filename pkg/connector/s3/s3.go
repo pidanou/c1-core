@@ -103,7 +103,7 @@ func (s *S3Connector) listObjects(bucket string, opts Options, cb connector.Call
 				Uri:          arn,
 				Metadata:     fmt.Sprintf(`{"last_modified": "%s"}`, lastModified)})
 		}
-		_ = cb.Callback(&proto.SyncResponse{Response: res})
+		_ = cb.Upsert(&proto.SyncResponse{Response: res})
 	}
 }
 

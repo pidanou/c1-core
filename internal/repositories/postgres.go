@@ -2,6 +2,7 @@ package repositories
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/pidanou/c1-core/internal/constants"
@@ -134,13 +135,27 @@ func (p *PostgresRepository) DeleteAccount(id int32) error {
 }
 
 func (p *PostgresRepository) AddData(data []connector.Data) error {
-	query := `INSERT INTO data (account_id, remote_id, resource_name, connector, uri, metadata) VALUES (:account_id, :remote_id, :resource_name, :connector, :uri, :metadata) ON CONFLICT (remote_id, account_id) 
+	last_synced_at_time := time.Now()
+	last_synced_at := last_synced_at_time.Format("2006-01-02T15:04:05.000Z")
+	query := fmt.Sprintf(`INSERT INTO data (account_id, remote_id, resource_name, connector, uri, metadata) VALUES (:account_id, :remote_id, :resource_name, :connector, :uri, :metadata) ON CONFLICT (remote_id, account_id) 
 	DO UPDATE SET 
 		resource_name = EXCLUDED.resource_name,
 		connector = EXCLUDED.connector,
 		uri = EXCLUDED.uri,
-		metadata = EXCLUDED.metadata`
+		metadata = EXCLUDED.metadata,
+    last_synced_at = %s
+  `, last_synced_at)
 	_, err := p.DB.NamedExec(query, data)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (p *PostgresRepository) DeleteData(ids []int32) error {
+	query, args, _ := sqlx.In("DELETE FROM data WHERE id in (?)", ids)
+	query = p.DB.Rebind(query)
+	_, err := p.DB.Exec(query, args...)
 	if err != nil {
 		return err
 	}
@@ -149,12 +164,19 @@ func (p *PostgresRepository) AddData(data []connector.Data) error {
 
 func (p *PostgresRepository) ListData(filters *types.DataFilter) ([]connector.Data, int, error) {
 	var data []connector.Data
+	var args []interface{}
 	var count = 0
+	var err error
 	query := `SELECT * FROM data WHERE 1=1`
 	countQuery := `SELECT count(*) FROM data WHERE 1=1`
-	query, countQuery, args, err := p.buildDataQuery(query, countQuery, filters)
-	if err != nil {
-		return nil, count, err
+	if filters == nil {
+		query += fmt.Sprintf(" ORDER BY account_id ASC, resource_name ASC LIMIT %v", constants.PageSize)
+	} else {
+
+		query, countQuery, args, err = filters.ToSQL(p.DB, query, countQuery)
+		if err != nil {
+			return nil, count, err
+		}
 	}
 	err = p.DB.Select(&data, query, args...)
 	if err != nil {
@@ -186,7 +208,7 @@ func (p *PostgresRepository) EditData(data *connector.Data) (*connector.Data, er
 	return p.GetData(data.ID)
 }
 
-func (p *PostgresRepository) buildDataQuery(baseQuery string, countQuery string, filters *types.DataFilter) (string, string, []interface{}, error) {
+func (p *PostgresRepository) buildDataQuery1(baseQuery string, countQuery string, filters *types.DataFilter) (string, string, []interface{}, error) {
 	var args []interface{}
 	if filters == nil {
 		baseQuery += fmt.Sprintf(" ORDER BY account_id ASC, resource_name ASC LIMIT %v", constants.PageSize)

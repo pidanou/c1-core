@@ -2,6 +2,7 @@ package connectormanager
 
 import (
 	"errors"
+	"fmt"
 	"log"
 	"os"
 	"os/exec"
@@ -122,7 +123,8 @@ type callbackHandler struct {
 	DataRepository repositories.ConnectorRepository
 }
 
-func (c *callbackHandler) Callback(res *proto.SyncResponse) error {
+func (c *callbackHandler) Upsert(res *proto.SyncResponse) error {
+	fmt.Println(res)
 	data := []connector.Data{}
 	for _, obj := range res.Response {
 		d := connector.Data{AccountID: c.AccountID, RemoteID: obj.RemoteId, Connector: c.Connector, ResourceName: obj.ResourceName, URI: obj.Uri, Metadata: obj.Metadata}
@@ -132,5 +134,10 @@ func (c *callbackHandler) Callback(res *proto.SyncResponse) error {
 	if err != nil {
 		log.Println("err", err)
 	}
+	return err
+}
+
+func (c *callbackHandler) Clean(req *proto.Empty) error {
+	var err error
 	return err
 }

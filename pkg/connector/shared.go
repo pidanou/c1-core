@@ -21,7 +21,8 @@ type ConnectorInterface interface {
 }
 
 type CallbackInterface interface {
-	Callback(*proto.SyncResponse) error
+	Upsert(*proto.SyncResponse) error
+	Clean(*proto.Empty) error
 }
 
 // GRPC Client: started by go-plugin to call RPC methods
@@ -90,8 +91,16 @@ func (ConnectorGRPCPlugin) GRPCClient(ctx context.Context, broker *plugin.GRPCBr
 // GRPC client/server to handle the data response
 type GRPCCallbackHandlerClient struct{ client proto.CallbackHandlerClient }
 
-func (m *GRPCCallbackHandlerClient) Callback(res *proto.SyncResponse) error {
-	_, err := m.client.Callback(context.Background(), res)
+func (m *GRPCCallbackHandlerClient) Upsert(res *proto.SyncResponse) error {
+	_, err := m.client.Upsert(context.Background(), res)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (m *GRPCCallbackHandlerClient) Clean(res *proto.Empty) error {
+	_, err := m.client.Clean(context.Background(), res)
 	if err != nil {
 		return err
 	}
@@ -103,7 +112,12 @@ type GRPCCallbackHandlerServer struct {
 	Impl CallbackInterface
 }
 
-func (m *GRPCCallbackHandlerServer) Callback(ctx context.Context, req *proto.SyncResponse) (*proto.Empty, error) {
-	err := m.Impl.Callback(req)
+func (m *GRPCCallbackHandlerServer) Upsert(ctx context.Context, req *proto.SyncResponse) (*proto.Empty, error) {
+	err := m.Impl.Upsert(req)
+	return &proto.Empty{}, err
+}
+
+func (m *GRPCCallbackHandlerServer) Clean(ctx context.Context, req *proto.Empty) (*proto.Empty, error) {
+	err := m.Impl.Clean(req)
 	return &proto.Empty{}, err
 }

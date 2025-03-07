@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.5.1
 // - protoc             v5.29.3
-// source: proto/connector.proto
+// source: pkg/connector/proto/connector.proto
 
 package proto
 
@@ -117,18 +117,20 @@ var Connector_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "proto/connector.proto",
+	Metadata: "pkg/connector/proto/connector.proto",
 }
 
 const (
-	CallbackHandler_Callback_FullMethodName = "/proto.CallbackHandler/Callback"
+	CallbackHandler_Upsert_FullMethodName = "/proto.CallbackHandler/Upsert"
+	CallbackHandler_Clean_FullMethodName  = "/proto.CallbackHandler/Clean"
 )
 
 // CallbackHandlerClient is the client API for CallbackHandler service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type CallbackHandlerClient interface {
-	Callback(ctx context.Context, in *SyncResponse, opts ...grpc.CallOption) (*Empty, error)
+	Upsert(ctx context.Context, in *SyncResponse, opts ...grpc.CallOption) (*Empty, error)
+	Clean(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*Empty, error)
 }
 
 type callbackHandlerClient struct {
@@ -139,10 +141,20 @@ func NewCallbackHandlerClient(cc grpc.ClientConnInterface) CallbackHandlerClient
 	return &callbackHandlerClient{cc}
 }
 
-func (c *callbackHandlerClient) Callback(ctx context.Context, in *SyncResponse, opts ...grpc.CallOption) (*Empty, error) {
+func (c *callbackHandlerClient) Upsert(ctx context.Context, in *SyncResponse, opts ...grpc.CallOption) (*Empty, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(Empty)
-	err := c.cc.Invoke(ctx, CallbackHandler_Callback_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, CallbackHandler_Upsert_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *callbackHandlerClient) Clean(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*Empty, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(Empty)
+	err := c.cc.Invoke(ctx, CallbackHandler_Clean_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -153,7 +165,8 @@ func (c *callbackHandlerClient) Callback(ctx context.Context, in *SyncResponse, 
 // All implementations must embed UnimplementedCallbackHandlerServer
 // for forward compatibility.
 type CallbackHandlerServer interface {
-	Callback(context.Context, *SyncResponse) (*Empty, error)
+	Upsert(context.Context, *SyncResponse) (*Empty, error)
+	Clean(context.Context, *Empty) (*Empty, error)
 	mustEmbedUnimplementedCallbackHandlerServer()
 }
 
@@ -164,8 +177,11 @@ type CallbackHandlerServer interface {
 // pointer dereference when methods are called.
 type UnimplementedCallbackHandlerServer struct{}
 
-func (UnimplementedCallbackHandlerServer) Callback(context.Context, *SyncResponse) (*Empty, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Callback not implemented")
+func (UnimplementedCallbackHandlerServer) Upsert(context.Context, *SyncResponse) (*Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Upsert not implemented")
+}
+func (UnimplementedCallbackHandlerServer) Clean(context.Context, *Empty) (*Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Clean not implemented")
 }
 func (UnimplementedCallbackHandlerServer) mustEmbedUnimplementedCallbackHandlerServer() {}
 func (UnimplementedCallbackHandlerServer) testEmbeddedByValue()                         {}
@@ -188,20 +204,38 @@ func RegisterCallbackHandlerServer(s grpc.ServiceRegistrar, srv CallbackHandlerS
 	s.RegisterService(&CallbackHandler_ServiceDesc, srv)
 }
 
-func _CallbackHandler_Callback_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _CallbackHandler_Upsert_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(SyncResponse)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(CallbackHandlerServer).Callback(ctx, in)
+		return srv.(CallbackHandlerServer).Upsert(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: CallbackHandler_Callback_FullMethodName,
+		FullMethod: CallbackHandler_Upsert_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(CallbackHandlerServer).Callback(ctx, req.(*SyncResponse))
+		return srv.(CallbackHandlerServer).Upsert(ctx, req.(*SyncResponse))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _CallbackHandler_Clean_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(Empty)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CallbackHandlerServer).Clean(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CallbackHandler_Clean_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CallbackHandlerServer).Clean(ctx, req.(*Empty))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -214,10 +248,14 @@ var CallbackHandler_ServiceDesc = grpc.ServiceDesc{
 	HandlerType: (*CallbackHandlerServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
-			MethodName: "Callback",
-			Handler:    _CallbackHandler_Callback_Handler,
+			MethodName: "Upsert",
+			Handler:    _CallbackHandler_Upsert_Handler,
+		},
+		{
+			MethodName: "Clean",
+			Handler:    _CallbackHandler_Clean_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "proto/connector.proto",
+	Metadata: "pkg/connector/proto/connector.proto",
 }
